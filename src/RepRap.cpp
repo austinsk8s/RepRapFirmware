@@ -14,6 +14,10 @@
 #include "Tasks.h"
 #include "Version.h"
 
+#if HAS_WIFI_NETWORKING
+#include <esp8266httpclient.h>
+#endif
+
 #ifdef DUET_NG
 # include "DueXn.h"
 #endif
@@ -2147,15 +2151,25 @@ void RepRap::SetMessage(const char *msg)
 // Display a message box on the web interface
 void RepRap::SetAlert(const char *msg, const char *title, int mode, float timeout, AxesBitmap controls)
 {
-	MutexLocker lock(messageBoxMutex);
-	mbox.message.copy(msg);
-	mbox.title.copy(title);
-	mbox.mode = mode;
-	mbox.timer = (timeout <= 0.0) ? 0 : millis();
-	mbox.timeout = round(max<float>(timeout, 0.0) * 1000.0);
-	mbox.controls = controls;
-	mbox.active = true;
-	++mbox.seq;
+	String message = str(msg);
+	String remoteHostName = message.erase(0,7);
+
+	if(platform->IsDuetWiFi() && mode == 0 && message.find("remote:") != string::npos) {
+		HTTPClient http;
+		http.begin("http://"+remoteHostName+".local/rr_gcode?gcode=M292");
+		http.GET();
+		http.end();
+	} else {
+		MutexLocker lock(messageBoxMutex);
+		mbox.message.copy(msg);
+		mbox.title.copy(title);
+		mbox.mode = mode;
+		mbox.timer = (timeout <= 0.0) ? 0 : millis();
+		mbox.timeout = round(max<float>(timeout, 0.0) * 1000.0);
+		mbox.controls = controls;
+		mbox.active = true;
+		++mbox.seq;
+	}
 }
 
 // Clear pending message box
